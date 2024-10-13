@@ -1,0 +1,66 @@
+o<messen> sub
+#1700=180		(Wechsel X Position)
+#1701=120		(Wechsel Y Position)
+#1702=150		(Wechsel Z Position)
+
+#1800=150		(Position sicheres Z)
+#1801=31.0 		(Position Taster X)
+#1802=173.8		(Position Taster Y)
+
+#1900=#<_coord_system>	(NP merken nur G54 bis G59)
+
+o500 if [#<_current_tool> EQ #<_selected_tool>]
+;(debug, Tool bereits in der Spindel)
+o500 else 
+M5
+G54
+G90 G0 	
+
+G53 G0 Z#1702	   	 (Wechsel Z Position)
+G53 G0 X#1700 Y#1701   	 (Wechsel XY Position)
+M6 T#<_selected_tool>
+
+G53 G0 X#1801 Y#1802  	 (Taster Position)
+G53 G0 Z#1800	   	 (Sichere Z Position)
+
+G43.1 Z0	   	 (TLO reset)
+G91
+G38.2 Z-125  F500   	 (messen grob)
+G1    Z3.0  F500   	 (frei fahren)	
+G38.2 Z-5  F50  	 (messen fein)
+#2000=[#5063+#5223]	 (Tastpunkt+NP Verschiebung)
+#2001=[#2000-#2002+#2003](Neu - diff + alt)  
+#2002=[#2000]      	 (Tastpunkt alt merken)
+#2003=[#2001]	   	 (Offset alt merken)	 
+G1 Z5.0 F500       	 (frei fahren)
+G90 G0
+
+G10 L1 P#<_current_tool> Z#2001
+G43.1 Z#2001       	 (TLO set)
+G53 G0 Z#1800		 (Sichere Z Position)
+G53 G0 Z#1702	   	 (Wechsel Z Position)
+
+;(debug, Differenz ist: #2001)
+
+(NP wiederhestellen nur G54 bis G59)	
+o100 if[#1900 EQ 540]
+G54
+o100 endif
+o101 if[#1900 EQ 550]
+G55
+o101 endif
+o102 if[#1900 EQ 560]
+G56
+o102 endif
+o103 if[#1900 EQ 570]
+G57
+o103 endif
+o104 if[#1900 EQ 580]
+G58
+o104 endif
+
+o500 endif
+
+
+o<messen> endsub
+M2

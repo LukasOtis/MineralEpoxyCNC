@@ -1,0 +1,177 @@
+
+# load the realtime components
+
+	loadrt [KINS]KINEMATICS
+	loadrt [EMCMOT]EMCMOT base_period_nsec=[EMCMOT]BASE_PERIOD servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS
+
+	loadrt flexi chip_type=STM SPI_clk_div=32 PRU_base_freq=120000
+	loadrt not names=stepen_not,stepen_z_not,probe_basic_time_not
+	loadrt time names=probe_basic_time_time
+	loadrt estop_latch names=estop_latch
+	loadrt and2 names=run_and,step_and
+	loadrt toggle names=hold_button_toggle
+	loadrt toggle2nist names=hold_toggle,paused_toggle
+	
+
+
+# probe_basic time
+
+	addf probe_basic_time_time servo-thread
+	addf probe_basic_time_not servo-thread
+
+# add the remora and motion functions to threads
+	addf flexi.read servo-thread
+	addf motion-command-handler servo-thread
+	addf motion-controller servo-thread
+	addf flexi.update-freq servo-thread
+	addf flexi.write servo-thread
+	addf stepen_not servo-thread
+	addf stepen_z_not servo-thread
+	addf estop_latch servo-thread
+	addf run_and servo-thread
+	addf step_and servo-thread
+	addf hold_toggle servo-thread
+	addf hold_button_toggle servo-thread
+
+
+#toggle2nist states & mux selectors
+	net program-is-paused hold_toggle.is-on <= halui.program.is-paused
+	
+# Analog spindle control - Uncomment if using PWM or analog. You will also need to comment out spindle_load.hal in postgui_call_list.hal.
+	loadrt scale names=spindle_speed_scale
+	addf spindle_speed_scale servo-thread
+	setp spindle_speed_scale.gain 0.004167 # volts per RPM, calculated over full scale. [max output voltage]/[Max spindle speed] * 10 Example: 0-10V, 24000 rpm: (10/24000) * 10 = 0.004167
+	net spindle-scale-in spindle.0.speed-out => spindle_speed_scale.in
+	net spindle-speed-scaled spindle_speed_scale.out => flexi.SP.SPINDLE_PWM
+	net spindle-enable spindle.0.on => flexi.output.SPINDLE_EN
+
+# estop loopback, SPI comms enable and feedback
+	net user-enable-out iocontrol.0.user-enable-out => flexi.SPI-enable
+	net user-request-enable iocontrol.0.user-request-enable => flexi.SPI-reset estop_latch.reset
+	#estop_latch returns 'ok' when fault-in is false, ok-in is true, and reset changes from false to true. 
+	net estop-fault_in flexi.input.HALT => estop_latch.fault-in
+	net remora-status flexi.SPI-status => estop_latch.ok-in
+	net estop-status estop_latch.ok-out => iocontrol.0.emc-enable-in
+
+
+# Joint 0 setup
+
+	setp flexi.joint.0.scale [JOINT_0]SCALE
+	setp flexi.joint.0.maxaccel [JOINT_0]STEPGEN_MAXACCEL
+	setp flexi.joint.0.pgain [JOINT_0]P_GAIN
+	setp flexi.joint.0.ff1gain [JOINT_0]FF1_GAIN
+	setp flexi.joint.0.deadband [JOINT_0]DEADBAND
+
+	net xpos-cmd joint.0.motor-pos-cmd => flexi.joint.0.pos-cmd  
+	net j0pos-fb flexi.joint.0.pos-fb => joint.0.motor-pos-fb
+	net j0enable joint.0.amp-enable-out => flexi.joint.0.enable
+
+	net x-home joint.0.home-sw-in => flexi.input.X_LIMIT
+
+
+# Joint 1 setup
+
+	setp flexi.joint.1.scale [JOINT_1]SCALE
+	setp flexi.joint.1.maxaccel [JOINT_1]STEPGEN_MAXACCEL
+	setp flexi.joint.1.pgain [JOINT_1]P_GAIN
+	setp flexi.joint.1.ff1gain [JOINT_1]FF1_GAIN
+	setp flexi.joint.1.deadband [JOINT_1]DEADBAND
+
+	net j1pos-cmd joint.1.motor-pos-cmd => flexi.joint.1.pos-cmd
+	net j1pos-fb flexi.joint.1.pos-fb => joint.1.motor-pos-fb 
+	net j1enable joint.1.amp-enable-out => flexi.joint.1.enable
+
+	net y-home joint.1.home-sw-in => flexi.input.Y_LIMIT
+
+
+# Joint 2 setup
+
+	setp flexi.joint.2.scale [JOINT_2]SCALE
+	setp flexi.joint.2.maxaccel [JOINT_2]STEPGEN_MAXACCEL
+	setp flexi.joint.2.pgain [JOINT_2]P_GAIN
+	setp flexi.joint.2.ff1gain [JOINT_2]FF1_GAIN
+	setp flexi.joint.2.deadband [JOINT_2]DEADBAND
+
+	net j2pos-cmd joint.2.motor-pos-cmd => flexi.joint.2.pos-cmd
+	net j2pos-fb flexi.joint.2.pos-fb => joint.2.motor-pos-fb
+	net j2enable joint.2.amp-enable-out => flexi.joint.2.enable
+
+	net z-home joint.2.home-sw-in => flexi.input.Z_LIMIT
+
+
+# Joint 3 setup
+
+	#setp flexi.joint.3.scale [JOINT_3]SCALE
+	#setp flexi.joint.3.maxaccel [JOINT_3]STEPGEN_MAXACCEL
+	#setp flexi.joint.3.pgain [JOINT_3]P_GAIN
+	#setp flexi.joint.3.ff1gain [JOINT_3]FF1_GAIN
+	#setp flexi.joint.3.deadband [JOINT_3]DEADBAND
+
+	#net j3pos-cmd joint.3.motor-pos-cmd => flexi.joint.3.pos-cmd
+	#net j3pos-fb flexi.joint.3.pos-fb => joint.3.motor-pos-fb
+	#net j3enable joint.3.amp-enable-out => flexi.joint.3.enable
+
+	#net A-home joint.3.home-sw-in => flexi.input.A_LIMIT
+
+
+# Joint 4 setup
+
+#	setp flexi.joint.4.scale [JOINT_4]SCALE
+#	setp flexi.joint.4.maxaccel [JOINT_4]STEPGEN_MAXACCEL
+#   setp flexi.joint.4.pgain [JOINT_4]P_GAIN
+#	setp flexi.joint.4.ff1gain [JOINT_4]FF1_GAIN
+#	setp flexi.joint.4.deadband [JOINT_4]DEADBAND
+
+#	net j4pos-cmd joint.4.motor-pos-cmd => flexi.joint.4.pos-cmd
+#	net j4pos-fb flexi.joint.4.pos-fb => joint.4.motor-pos-fb
+#	net j4enable joint.4.amp-enable-out => flexi.joint.4.enable
+
+#	net b-home joint.4.home-sw-in => flexi.input.B_LIMIT
+
+
+# Motor enables
+
+	#inverted 
+	net j0enable => stepen_not.in
+	net stepen_inv stepen_not.out <= flexi.output.STEP_EN
+	net j2enable => stepen_z_not.in
+	net stepen_z_inv stepen_z_not.out <= flexi.output.STEP_EN_Z
+
+	#non-inverted
+	#net j0enable => flexi.output.STEP_EN
+	#net j2enable => flexi.output.STEP_EN_Z
+
+# Flood and mist outputs
+	net flood flexi.output.COOLANT <= iocontrol.0.coolant-flood
+	net mist flexi.output.MIST <= iocontrol.0.coolant-mist
+
+# User buttons
+	#Halt is shared with motor alarms and is up in the estop loop.
+
+	#Hold logic
+	net hold_button flexi.input.FEED_HOLD => hold_button_toggle.in
+	net hold_toggle_latch hold_button_toggle.out => hold_toggle.in
+	net hold_on halui.program.pause <= hold_toggle.on
+	net hold_off halui.program.resume <= hold_toggle.off
+
+	#Cycle start logic. When not running, start the program. When in feed hold, single step through the program.
+	net run-step_button flexi.input.CYCLE_START => run_and.in0 step_and.in0
+	net program-is-idle halui.program.is-idle => run_and.in1 #if not running AND button pressed
+	net program-run run_and.out => halui.program.run #run program
+	net program-is-paused => step_and.in1 #if paused AND button pressed
+	net single-step step_and.out => halui.program.step #single step
+
+
+# Probe
+	net probe motion.probe-input <= flexi.input.PROBE
+
+# Manual toolchange
+
+	loadusr -W hal_manualtoolchange
+	net tool-change iocontrol.0.tool-change => hal_manualtoolchange.change
+	net tool-changed iocontrol.0.tool-changed <= hal_manualtoolchange.changed
+	net tool-number iocontrol.0.tool-prep-number => hal_manualtoolchange.number
+	net tool-prepare-loopback iocontrol.0.tool-prepare => iocontrol.0.tool-prepared
+
+
+	
